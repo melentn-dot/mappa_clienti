@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Mappa Clienti</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
     <style>
         body { margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; display: flex; height: 100vh; }
         .sidebar { width: 380px; background: white; box-shadow: 2px 0 5px rgba(0,0,0,0.1); display: flex; flex-direction: column; }
@@ -23,7 +25,7 @@
         .filters select, .filters input { width: 100%; padding: 8px 10px; border: 1px solid #d1d5db; border-radius: 6px; box-sizing: border-box; font-size: 13px; }
         .filters select:focus, .filters input:focus { outline: none; border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1); }
         .stats { padding: 12px 20px; background: #eff6ff; border-bottom: 1px solid #e5e7eb; font-size: 12px; color: #1e40af; }
-        .stats-row { display: flex; gap: 15px; align-items: center; }
+        .stats-row { display: flex; gap: 15px; align-items: center; flex-wrap: wrap; }
         .stat-item { display: flex; align-items: center; gap: 6px; }
         .stat-dot { width: 10px; height: 10px; border-radius: 50%; }
         .dot-primary { background: #2563eb; }
@@ -41,11 +43,19 @@
         .customer-info a { color: #2563eb; text-decoration: none; }
         .customer-info a:hover { text-decoration: underline; }
         .customer-category { font-size: 11px; color: #6b7280; margin-top: 6px; padding-top: 6px; border-top: 1px solid #e5e7eb; }
-        .alert { padding: 15px; margin: 15px 20px; background: #fef3c7; border: 1px solid #fbbf24; border-radius: 6px; font-size: 12px; color: #92400e; }
-        .alert-title { font-weight: 700; margin-bottom: 4px; }
+        .info-box { padding: 15px; margin: 15px 20px; background: #dbeafe; border: 1px solid #60a5fa; border-radius: 6px; font-size: 12px; color: #1e40af; }
+        .info-title { font-weight: 700; margin-bottom: 4px; }
         #map { flex: 1; }
         .loading { display: inline-block; width: 12px; height: 12px; border: 2px solid #2563eb; border-top-color: transparent; border-radius: 50%; animation: spin 0.6s linear infinite; }
         @keyframes spin { to { transform: rotate(360deg); } }
+        
+        /* Personalizzazione cluster */
+        .marker-cluster-small { background-color: rgba(37, 99, 235, 0.6); }
+        .marker-cluster-small div { background-color: rgba(37, 99, 235, 0.8); color: white; font-weight: bold; }
+        .marker-cluster-medium { background-color: rgba(249, 115, 22, 0.6); }
+        .marker-cluster-medium div { background-color: rgba(249, 115, 22, 0.8); color: white; font-weight: bold; }
+        .marker-cluster-large { background-color: rgba(220, 38, 38, 0.6); }
+        .marker-cluster-large div { background-color: rgba(220, 38, 38, 0.8); color: white; font-weight: bold; }
     </style>
 </head>
 <body>
@@ -66,7 +76,7 @@
             <div class="filter-group">
                 <label>🔍 Filtra per provincia</label>
                 <select id="provinceFilter">
-                    <option value="">-- Seleziona provincia --</option>
+                    <option value="">-- Tutte le province --</option>
                 </select>
             </div>
             <div class="filter-group">
@@ -77,7 +87,7 @@
 
         <div class="stats" id="statsSection" style="display:none;"></div>
 
-        <div id="alertBox"></div>
+        <div id="infoBox"></div>
 
         <div class="customer-list" id="customerList"></div>
     </div>
@@ -85,6 +95,7 @@
     <div id="map"></div>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script>
         let map = L.map('map').setView([45.4642, 9.19], 7);
@@ -92,7 +103,17 @@
             attribution: '© OpenStreetMap'
         }).addTo(map);
         
-        let customers = [], markers = [], isGeocoding = false;
+        let customers = [];
+        let markerClusterGroup = L.markerClusterGroup({
+            chunkedLoading: true,
+            spiderfyOnMaxZoom: true,
+            showCoverageOnHover: false,
+            zoomToBoundsOnClick: true,
+            maxClusterRadius: 80
+        });
+        map.addLayer(markerClusterGroup);
+        
+        let isGeocoding = false;
 
         document.getElementById('fileInput').addEventListener('change', function(e) {
             const file = e.target.files[0];
@@ -171,7 +192,7 @@
 
             // Popola filtro province
             const select = document.getElementById('provinceFilter');
-            select.innerHTML = '<option value="">-- Seleziona provincia --</option>';
+            select.innerHTML = '<option value="">-- Tutte le province --</option>';
             Array.from(provinces).sort().forEach(p => {
                 const count = customers.filter(c => c.province === p).length;
                 const opt = document.createElement('option');
@@ -182,17 +203,12 @@
 
             document.getElementById('filters').classList.add('active');
             
-            // Mostra alert se ci sono tanti clienti
-            if (customers.length > 100) {
-                document.getElementById('alertBox').innerHTML = `
-                    <div class="alert">
-                        <div class="alert-title">⚠️ ${customers.length} clienti caricati</div>
-                        Seleziona una provincia dal filtro per visualizzare i marker sulla mappa (max 100 per provincia)
-                    </div>
-                `;
-            } else {
-                document.getElementById('alertBox').innerHTML = '';
-            }
+            document.getElementById('infoBox').innerHTML = `
+                <div class="info-box">
+                    <div class="info-title">ℹ️ ${customers.length} clienti caricati</div>
+                    Seleziona una provincia per visualizzare i marker sulla mappa. I marker sono raggruppati in cluster: fai zoom per vedere i dettagli!
+                </div>
+            `;
             
             showCustomers(customers);
             updateStats(customers);
@@ -213,6 +229,9 @@
                     <div class="stat-item">
                         <div class="stat-dot dot-secondary"></div>
                         <span>Secondario: ${secondary}</span>
+                    </div>
+                    <div class="stat-item">
+                        <span>📍 Totale: ${list.length}</span>
                     </div>
                 </div>
             `;
@@ -246,8 +265,7 @@
             if (isGeocoding) return;
             isGeocoding = true;
             
-            markers.forEach(m => m.remove());
-            markers = [];
+            markerClusterGroup.clearLayers();
 
             const statsSection = document.getElementById('statsSection');
             const progressDiv = document.createElement('div');
@@ -259,9 +277,8 @@
             statsSection.appendChild(progressDiv);
 
             let loaded = 0;
-            const bounds = L.latLngBounds();
 
-            // Geocodifica 5 alla volta per velocizzare
+            // Geocodifica 5 alla volta per velocità
             for (let i = 0; i < list.length; i += 5) {
                 const batch = list.slice(i, i + 5);
                 
@@ -279,7 +296,7 @@
                                     iconSize: [12, 12],
                                     iconAnchor: [6, 6]
                                 })
-                            }).addTo(map);
+                            });
                             
                             marker.bindPopup(`
                                 <div style="font-family: system-ui; min-width: 250px;">
@@ -292,8 +309,7 @@
                                 </div>
                             `);
                             
-                            markers.push(marker);
-                            bounds.extend([data[0].lat, data[0].lon]);
+                            markerClusterGroup.addLayer(marker);
                         }
                         
                         loaded++;
@@ -306,12 +322,7 @@
                     }
                 }));
 
-                // Delay ridotto tra batch
                 await new Promise(r => setTimeout(r, 250));
-            }
-
-            if (markers.length > 0) {
-                map.fitBounds(bounds, { padding: [50, 50] });
             }
 
             setTimeout(() => {
@@ -335,19 +346,16 @@
             showCustomers(filtered);
             updateStats(filtered);
             
-            if (province && filtered.length <= 100) {
+            if (province && filtered.length > 0) {
+                document.getElementById('infoBox').innerHTML = `
+                    <div class="info-box">
+                        <div class="info-title">🔄 Caricamento ${filtered.length} marker...</div>
+                        I marker vengono raggruppati automaticamente. Fai zoom per vedere i dettagli!
+                    </div>
+                `;
                 geocodeAll(filtered);
-            } else {
-                markers.forEach(m => m.remove());
-                markers = [];
-                if (filtered.length > 100) {
-                    document.getElementById('alertBox').innerHTML = `
-                        <div class="alert">
-                            <div class="alert-title">⚠️ Troppi clienti (${filtered.length})</div>
-                            La provincia selezionata ha più di 100 clienti. I marker non verranno visualizzati per motivi di performance.
-                        </div>
-                    `;
-                }
+            } else if (province) {
+                markerClusterGroup.clearLayers();
             }
         });
 
