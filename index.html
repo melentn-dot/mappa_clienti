@@ -6,54 +6,118 @@
     <title>Mappa Clienti</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
-        body { margin: 0; padding: 0; font-family: Arial, sans-serif; display: flex; height: 100vh; }
-        .sidebar { width: 350px; background: white; box-shadow: 2px 0 5px rgba(0,0,0,0.1); display: flex; flex-direction: column; }
-        .header { background: #2563eb; color: white; padding: 20px; }
-        .upload-area { padding: 20px; text-align: center; }
-        .upload-btn { background: #2563eb; color: white; padding: 12px 24px; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; }
-        .upload-btn:hover { background: #1d4ed8; }
-        .filters { padding: 20px; border-top: 1px solid #e5e7eb; display: none; }
+        body { margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; display: flex; height: 100vh; }
+        .sidebar { width: 380px; background: white; box-shadow: 2px 0 5px rgba(0,0,0,0.1); display: flex; flex-direction: column; }
+        .header { background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%); color: white; padding: 20px; }
+        .header h2 { margin: 0; font-size: 20px; }
+        .header p { margin: 5px 0 0 0; font-size: 13px; opacity: 0.9; }
+        .upload-area { padding: 20px; text-align: center; border-bottom: 1px solid #e5e7eb; }
+        .upload-btn { background: #2563eb; color: white; padding: 12px 24px; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 600; transition: all 0.2s; }
+        .upload-btn:hover { background: #1d4ed8; transform: translateY(-1px); }
+        .upload-btn:disabled { background: #9ca3af; cursor: not-allowed; transform: none; }
+        .filters { padding: 15px 20px; border-bottom: 1px solid #e5e7eb; display: none; background: #f9fafb; }
         .filters.active { display: block; }
-        .filters select, .filters input { width: 100%; padding: 8px; margin-bottom: 10px; border: 1px solid #d1d5db; border-radius: 4px; box-sizing: border-box; }
-        .customer-list { flex: 1; overflow-y: auto; padding: 10px; }
-        .customer-card { background: #f9fafb; padding: 10px; margin-bottom: 8px; border-radius: 6px; font-size: 13px; }
-        .customer-card.secondary { background: #fff7ed; }
-        .customer-name { font-weight: bold; margin-bottom: 4px; }
+        .filter-group { margin-bottom: 12px; }
+        .filter-group:last-child { margin-bottom: 0; }
+        .filter-group label { display: block; font-size: 12px; font-weight: 600; color: #374151; margin-bottom: 6px; }
+        .filters select, .filters input { width: 100%; padding: 8px 10px; border: 1px solid #d1d5db; border-radius: 6px; box-sizing: border-box; font-size: 13px; }
+        .filters select:focus, .filters input:focus { outline: none; border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1); }
+        .stats { padding: 12px 20px; background: #eff6ff; border-bottom: 1px solid #e5e7eb; font-size: 12px; color: #1e40af; }
+        .stats-row { display: flex; gap: 15px; align-items: center; }
+        .stat-item { display: flex; align-items: center; gap: 6px; }
+        .stat-dot { width: 10px; height: 10px; border-radius: 50%; }
+        .dot-primary { background: #2563eb; }
+        .dot-secondary { background: #f97316; }
+        .progress-bar { background: #dbeafe; border-radius: 6px; padding: 10px; margin-top: 10px; }
+        .progress-text { font-size: 11px; color: #1e40af; margin-bottom: 6px; }
+        .progress-fill { height: 4px; background: #2563eb; border-radius: 2px; transition: width 0.3s; }
+        .customer-list { flex: 1; overflow-y: auto; padding: 15px; }
+        .customer-card { background: white; padding: 12px; margin-bottom: 10px; border-radius: 8px; font-size: 13px; border: 1px solid #e5e7eb; transition: all 0.2s; }
+        .customer-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+        .customer-card.secondary { background: #fff7ed; border-color: #fdba74; }
+        .customer-name { font-weight: 700; margin-bottom: 6px; color: #111827; font-size: 14px; }
+        .customer-badge { display: inline-block; background: #fed7aa; color: #9a3412; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 600; margin-bottom: 6px; }
+        .customer-info { margin: 4px 0; color: #6b7280; line-height: 1.5; }
+        .customer-info a { color: #2563eb; text-decoration: none; }
+        .customer-info a:hover { text-decoration: underline; }
+        .customer-category { font-size: 11px; color: #6b7280; margin-top: 6px; padding-top: 6px; border-top: 1px solid #e5e7eb; }
+        .alert { padding: 15px; margin: 15px 20px; background: #fef3c7; border: 1px solid #fbbf24; border-radius: 6px; font-size: 12px; color: #92400e; }
+        .alert-title { font-weight: 700; margin-bottom: 4px; }
         #map { flex: 1; }
+        .loading { display: inline-block; width: 12px; height: 12px; border: 2px solid #2563eb; border-top-color: transparent; border-radius: 50%; animation: spin 0.6s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
     </style>
 </head>
 <body>
     <div class="sidebar">
         <div class="header">
             <h2>🏗️ Mappa Clienti</h2>
+            <p>Distribuzione Materiali Edilizia</p>
         </div>
+        
         <div class="upload-area">
             <input type="file" id="fileInput" accept=".xlsx,.xls" style="display:none">
-            <button class="upload-btn" onclick="document.getElementById('fileInput').click()">📁 Carica Excel</button>
+            <button class="upload-btn" id="uploadBtn" onclick="document.getElementById('fileInput').click()">
+                📁 Carica Excel Clienti
+            </button>
         </div>
+
         <div class="filters" id="filters">
-            <select id="provinceFilter"><option value="">Tutte le province</option></select>
-            <input type="text" id="searchInput" placeholder="Cerca cliente...">
+            <div class="filter-group">
+                <label>🔍 Filtra per provincia</label>
+                <select id="provinceFilter">
+                    <option value="">-- Seleziona provincia --</option>
+                </select>
+            </div>
+            <div class="filter-group">
+                <label>🔎 Cerca cliente</label>
+                <input type="text" id="searchInput" placeholder="Nome, città, categoria...">
+            </div>
         </div>
+
+        <div class="stats" id="statsSection" style="display:none;"></div>
+
+        <div id="alertBox"></div>
+
         <div class="customer-list" id="customerList"></div>
     </div>
+
     <div id="map"></div>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script>
         let map = L.map('map').setView([45.4642, 9.19], 7);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
-        let customers = [], markers = [];
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap'
+        }).addTo(map);
+        
+        let customers = [], markers = [], isGeocoding = false;
 
         document.getElementById('fileInput').addEventListener('change', function(e) {
             const file = e.target.files[0];
             if (!file) return;
+            
+            const btn = document.getElementById('uploadBtn');
+            btn.disabled = true;
+            btn.innerHTML = '<span class="loading"></span> Caricamento...';
+            
             const reader = new FileReader();
             reader.onload = function(e) {
-                const workbook = XLSX.read(new Uint8Array(e.target.result), {type: 'array'});
-                const rows = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
-                processData(rows);
+                try {
+                    const workbook = XLSX.read(new Uint8Array(e.target.result), {type: 'array'});
+                    const rows = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
+                    processData(rows);
+                    btn.innerHTML = '✓ File caricato';
+                    setTimeout(() => {
+                        btn.innerHTML = '📁 Carica altro Excel';
+                        btn.disabled = false;
+                    }, 2000);
+                } catch(err) {
+                    alert('Errore nel caricamento: ' + err.message);
+                    btn.innerHTML = '📁 Carica Excel Clienti';
+                    btn.disabled = false;
+                }
             };
             reader.readAsArrayBuffer(file);
         });
@@ -61,89 +125,246 @@
         function processData(rows) {
             customers = [];
             const provinces = new Set();
+            
             rows.forEach(row => {
                 if (row['Indirizzo'] && row['Localita']) {
                     const prov = (row['Localita'].match(/\(([A-Z]{2})\)/) || [])[1] || '';
                     if (prov) provinces.add(prov);
+                    
                     customers.push({
-                        name: row['Nome Cliente'],
+                        name: row['Nome Cliente'] || '',
                         address: row['Indirizzo'] + ', ' + row['Localita'] + ', Italy',
+                        fullAddress: row['Indirizzo'] || '',
+                        city: row['Localita'] || '',
                         email: row['Email'] || '',
                         phone: row['Telefono'] || '',
-                        city: row['Localita'],
+                        mobile: row['Cellulare'] || '',
+                        category: row['CategCommerciale'] || '',
+                        agent: row['Agente'] || '',
+                        partitaIVA: row['PartitaIVA'] || '',
                         province: prov,
                         type: 'primary'
                     });
                 }
+
                 if (row['Indirizzo Secondario di consegna'] && row['Localita Indirizzo Secondario di consegna']) {
                     const prov = (row['Localita Indirizzo Secondario di consegna'].match(/\(([A-Z]{2})\)/) || [])[1] || '';
                     if (prov) provinces.add(prov);
+                    
                     customers.push({
-                        name: row['Nome Cliente'],
+                        name: row['Nome Cliente'] || '',
                         address: row['Indirizzo Secondario di consegna'] + ', ' + row['Localita Indirizzo Secondario di consegna'] + ', Italy',
+                        fullAddress: row['Indirizzo Secondario di consegna'] || '',
+                        city: row['Localita Indirizzo Secondario di consegna'] || '',
                         email: row['Email'] || '',
                         phone: row['Telefono'] || '',
-                        city: row['Localita Indirizzo Secondario di consegna'],
+                        mobile: row['Cellulare'] || '',
+                        category: row['CategCommerciale'] || '',
+                        agent: row['Agente'] || '',
+                        partitaIVA: row['PartitaIVA'] || '',
+                        descSede: row['DescSede'] || '',
                         province: prov,
                         type: 'secondary'
                     });
                 }
             });
+
+            // Popola filtro province
             const select = document.getElementById('provinceFilter');
+            select.innerHTML = '<option value="">-- Seleziona provincia --</option>';
             Array.from(provinces).sort().forEach(p => {
+                const count = customers.filter(c => c.province === p).length;
                 const opt = document.createElement('option');
                 opt.value = p;
-                opt.textContent = p + ' (' + customers.filter(c => c.province === p).length + ')';
+                opt.textContent = `${p} (${count} clienti)`;
                 select.appendChild(opt);
             });
+
             document.getElementById('filters').classList.add('active');
+            
+            // Mostra alert se ci sono tanti clienti
+            if (customers.length > 100) {
+                document.getElementById('alertBox').innerHTML = `
+                    <div class="alert">
+                        <div class="alert-title">⚠️ ${customers.length} clienti caricati</div>
+                        Seleziona una provincia dal filtro per visualizzare i marker sulla mappa (max 100 per provincia)
+                    </div>
+                `;
+            } else {
+                document.getElementById('alertBox').innerHTML = '';
+            }
+            
             showCustomers(customers);
-            if (customers.length <= 50) geocodeAll(customers);
+            updateStats(customers);
+        }
+
+        function updateStats(list) {
+            const primary = list.filter(c => c.type === 'primary').length;
+            const secondary = list.filter(c => c.type === 'secondary').length;
+            
+            const statsSection = document.getElementById('statsSection');
+            statsSection.style.display = 'block';
+            statsSection.innerHTML = `
+                <div class="stats-row">
+                    <div class="stat-item">
+                        <div class="stat-dot dot-primary"></div>
+                        <span>Principale: ${primary}</span>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-dot dot-secondary"></div>
+                        <span>Secondario: ${secondary}</span>
+                    </div>
+                </div>
+            `;
         }
 
         function showCustomers(list) {
-            document.getElementById('customerList').innerHTML = list.slice(0, 100).map(c => `
+            const container = document.getElementById('customerList');
+            container.innerHTML = list.slice(0, 200).map(c => `
                 <div class="customer-card ${c.type}">
                     <div class="customer-name">${c.name}</div>
-                    <div>${c.city}</div>
-                    ${c.email ? '<div>✉️ ' + c.email + '</div>' : ''}
-                    ${c.phone ? '<div>📞 ' + c.phone + '</div>' : ''}
+                    ${c.type === 'secondary' ? '<div class="customer-badge">📍 Indirizzo Secondario' + (c.descSede ? ' - ' + c.descSede : '') + '</div>' : ''}
+                    <div class="customer-info">📍 ${c.fullAddress}</div>
+                    <div class="customer-info">${c.city}</div>
+                    ${c.email ? '<div class="customer-info"><a href="mailto:' + c.email + '">✉️ ' + c.email + '</a></div>' : ''}
+                    ${c.phone ? '<div class="customer-info"><a href="tel:' + c.phone + '">📞 ' + c.phone + '</a></div>' : ''}
+                    ${c.mobile ? '<div class="customer-info"><a href="tel:' + c.mobile + '">📱 ' + c.mobile + '</a></div>' : ''}
+                    ${c.category || c.agent ? '<div class="customer-category">' + 
+                        (c.category ? c.category : '') + 
+                        (c.category && c.agent ? ' • ' : '') + 
+                        (c.agent ? c.agent : '') + 
+                    '</div>' : ''}
                 </div>
             `).join('');
-        }
-
-        async function geocodeAll(list) {
-            markers.forEach(m => m.remove());
-            markers = [];
-            for (const c of list) {
-                try {
-                    const res = await fetch('https://nominatim.openstreetmap.org/search?format=json&q=' + encodeURIComponent(c.address) + '&limit=1');
-                    const data = await res.json();
-                    if (data[0]) {
-                        const marker = L.marker([data[0].lat, data[0].lon], {
-                            icon: L.divIcon({
-                                html: '<div style="background:' + (c.type === 'primary' ? '#2563eb' : '#f97316') + ';width:12px;height:12px;border-radius:50%;border:2px solid white"></div>',
-                                iconSize: [12, 12],
-                                iconAnchor: [6, 6]
-                            })
-                        }).addTo(map);
-                        marker.bindPopup('<b>' + c.name + '</b><br>' + c.city);
-                        markers.push(marker);
-                    }
-                    await new Promise(r => setTimeout(r, 1100));
-                } catch(e) {}
+            
+            if (list.length > 200) {
+                container.innerHTML += '<div style="padding: 15px; text-align: center; color: #6b7280; font-size: 12px;">Mostrando i primi 200 di ' + list.length + ' clienti</div>';
             }
         }
 
+        async function geocodeAll(list) {
+            if (isGeocoding) return;
+            isGeocoding = true;
+            
+            markers.forEach(m => m.remove());
+            markers = [];
+
+            const statsSection = document.getElementById('statsSection');
+            const progressDiv = document.createElement('div');
+            progressDiv.className = 'progress-bar';
+            progressDiv.innerHTML = `
+                <div class="progress-text">Caricamento marker: <span id="progressText">0 / ${list.length}</span></div>
+                <div class="progress-fill" id="progressFill" style="width: 0%"></div>
+            `;
+            statsSection.appendChild(progressDiv);
+
+            let loaded = 0;
+            const bounds = L.latLngBounds();
+
+            // Geocodifica 5 alla volta per velocizzare
+            for (let i = 0; i < list.length; i += 5) {
+                const batch = list.slice(i, i + 5);
+                
+                await Promise.all(batch.map(async (c) => {
+                    try {
+                        const res = await fetch('https://nominatim.openstreetmap.org/search?format=json&q=' + encodeURIComponent(c.address) + '&limit=1', {
+                            headers: { 'User-Agent': 'CustomerMapApp' }
+                        });
+                        const data = await res.json();
+                        
+                        if (data[0]) {
+                            const marker = L.marker([data[0].lat, data[0].lon], {
+                                icon: L.divIcon({
+                                    html: '<div style="background:' + (c.type === 'primary' ? '#2563eb' : '#f97316') + ';width:12px;height:12px;border-radius:50%;border:2px solid white;box-shadow:0 2px 4px rgba(0,0,0,0.3)"></div>',
+                                    iconSize: [12, 12],
+                                    iconAnchor: [6, 6]
+                                })
+                            }).addTo(map);
+                            
+                            marker.bindPopup(`
+                                <div style="font-family: system-ui; min-width: 250px;">
+                                    ${c.type === 'secondary' ? '<div style="background: #fed7aa; color: #9a3412; padding: 4px 8px; border-radius: 4px; margin-bottom: 8px; font-size: 11px; font-weight: 600;">📍 INDIRIZZO SECONDARIO' + (c.descSede ? ' - ' + c.descSede : '') + '</div>' : ''}
+                                    <div style="font-weight: 700; font-size: 14px; margin-bottom: 6px;">${c.name}</div>
+                                    <div style="font-size: 12px; color: #6b7280; margin-bottom: 4px;">📍 ${c.fullAddress}<br>${c.city}</div>
+                                    ${c.email ? '<div style="font-size: 12px; margin: 3px 0;"><a href="mailto:' + c.email + '" style="color: #2563eb; text-decoration: none;">✉️ ' + c.email + '</a></div>' : ''}
+                                    ${c.phone ? '<div style="font-size: 12px; margin: 3px 0;"><a href="tel:' + c.phone + '" style="color: #2563eb; text-decoration: none;">📞 ' + c.phone + '</a></div>' : ''}
+                                    ${c.category ? '<div style="font-size: 11px; color: #6b7280; margin-top: 6px; padding-top: 6px; border-top: 1px solid #e5e7eb;">' + c.category + '</div>' : ''}
+                                </div>
+                            `);
+                            
+                            markers.push(marker);
+                            bounds.extend([data[0].lat, data[0].lon]);
+                        }
+                        
+                        loaded++;
+                        document.getElementById('progressText').textContent = `${loaded} / ${list.length}`;
+                        document.getElementById('progressFill').style.width = `${(loaded / list.length) * 100}%`;
+                    } catch(e) {
+                        loaded++;
+                        document.getElementById('progressText').textContent = `${loaded} / ${list.length}`;
+                        document.getElementById('progressFill').style.width = `${(loaded / list.length) * 100}%`;
+                    }
+                }));
+
+                // Delay ridotto tra batch
+                await new Promise(r => setTimeout(r, 250));
+            }
+
+            if (markers.length > 0) {
+                map.fitBounds(bounds, { padding: [50, 50] });
+            }
+
+            setTimeout(() => {
+                if (progressDiv.parentNode) progressDiv.remove();
+                isGeocoding = false;
+            }, 2000);
+        }
+
         document.getElementById('provinceFilter').addEventListener('change', function(e) {
-            const filtered = e.target.value ? customers.filter(c => c.province === e.target.value) : customers;
+            const province = e.target.value;
+            const search = document.getElementById('searchInput').value.toLowerCase();
+            
+            let filtered = customers;
+            if (province) filtered = filtered.filter(c => c.province === province);
+            if (search) filtered = filtered.filter(c => 
+                c.name.toLowerCase().includes(search) || 
+                c.city.toLowerCase().includes(search) ||
+                c.category.toLowerCase().includes(search)
+            );
+            
             showCustomers(filtered);
-            if (e.target.value && filtered.length <= 50) geocodeAll(filtered);
+            updateStats(filtered);
+            
+            if (province && filtered.length <= 100) {
+                geocodeAll(filtered);
+            } else {
+                markers.forEach(m => m.remove());
+                markers = [];
+                if (filtered.length > 100) {
+                    document.getElementById('alertBox').innerHTML = `
+                        <div class="alert">
+                            <div class="alert-title">⚠️ Troppi clienti (${filtered.length})</div>
+                            La provincia selezionata ha più di 100 clienti. I marker non verranno visualizzati per motivi di performance.
+                        </div>
+                    `;
+                }
+            }
         });
 
         document.getElementById('searchInput').addEventListener('input', function(e) {
             const search = e.target.value.toLowerCase();
-            showCustomers(customers.filter(c => c.name.toLowerCase().includes(search) || c.city.toLowerCase().includes(search)));
+            const province = document.getElementById('provinceFilter').value;
+            
+            let filtered = customers;
+            if (province) filtered = filtered.filter(c => c.province === province);
+            if (search) filtered = filtered.filter(c => 
+                c.name.toLowerCase().includes(search) || 
+                c.city.toLowerCase().includes(search) ||
+                c.category.toLowerCase().includes(search)
+            );
+            
+            showCustomers(filtered);
+            updateStats(filtered);
         });
     </script>
 </body>
