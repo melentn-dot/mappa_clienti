@@ -112,8 +112,17 @@
             maxClusterRadius: 80
         });
         map.addLayer(markerClusterGroup);
-        
+
         let isGeocoding = false;
+        let searchTimeout = null;
+
+        // Geocoding cache to avoid redundant API calls
+        let geocodeCache = {};
+        try {
+            geocodeCache = JSON.parse(localStorage.getItem('geocodeCache') || '{}');
+        } catch(e) {
+            console.warn('Could not load geocode cache:', e);
+        }
 
         document.getElementById('fileInput').addEventListener('change', function(e) {
             const file = e.target.files[0];
@@ -190,11 +199,16 @@
                 }
             });
 
-            // Popola filtro province
+            // Popola filtro province - optimized with single pass counting
+            const provinceCounts = {};
+            customers.forEach(c => {
+                provinceCounts[c.province] = (provinceCounts[c.province] || 0) + 1;
+            });
+
             const select = document.getElementById('provinceFilter');
             select.innerHTML = '<option value="">-- Tutte le province --</option>';
             Array.from(provinces).sort().forEach(p => {
-                const count = customers.filter(c => c.province === p).length;
+                const count = provinceCounts[p];
                 const opt = document.createElement('option');
                 opt.value = p;
                 opt.textContent = `${p} (${count} clienti)`;
@@ -215,9 +229,13 @@
         }
 
         function updateStats(list) {
-            const primary = list.filter(c => c.type === 'primary').length;
-            const secondary = list.filter(c => c.type === 'secondary').length;
-            
+            // Optimized single-pass counting
+            let primary = 0, secondary = 0;
+            list.forEach(c => {
+                if (c.type === 'primary') primary++;
+                else secondary++;
+            });
+
             const statsSection = document.getElementById('statsSection');
             statsSection.style.display = 'block';
             statsSection.innerHTML = `
@@ -277,27 +295,53 @@
             statsSection.appendChild(progressDiv);
 
             let loaded = 0;
+            let lastProgressUpdate = 0;
+
+            // Helper function to update progress (batched for performance)
+            function updateProgress() {
+                document.getElementById('progressText').textContent = `${loaded} / ${list.length}`;
+                document.getElementById('progressFill').style.width = `${(loaded / list.length) * 100}%`;
+            }
 
             // Geocodifica 5 alla volta per velocità
             for (let i = 0; i < list.length; i += 5) {
                 const batch = list.slice(i, i + 5);
-                
+
                 await Promise.all(batch.map(async (c) => {
                     try {
-                        const res = await fetch('https://nominatim.openstreetmap.org/search?format=json&q=' + encodeURIComponent(c.address) + '&limit=1', {
-                            headers: { 'User-Agent': 'CustomerMapApp' }
-                        });
-                        const data = await res.json();
-                        
-                        if (data[0]) {
-                            const marker = L.marker([data[0].lat, data[0].lon], {
+                        let coords = null;
+
+                        // Check cache first
+                        if (geocodeCache[c.address]) {
+                            coords = geocodeCache[c.address];
+                        } else {
+                            // Fetch from API if not cached
+                            const res = await fetch('https://nominatim.openstreetmap.org/search?format=json&q=' + encodeURIComponent(c.address) + '&limit=1', {
+                                headers: { 'User-Agent': 'CustomerMapApp' }
+                            });
+                            const data = await res.json();
+
+                            if (data[0]) {
+                                coords = { lat: data[0].lat, lon: data[0].lon };
+                                geocodeCache[c.address] = coords;
+                                // Save to localStorage (batch save for performance)
+                                try {
+                                    localStorage.setItem('geocodeCache', JSON.stringify(geocodeCache));
+                                } catch(e) {
+                                    console.warn('Could not save to cache:', e);
+                                }
+                            }
+                        }
+
+                        if (coords) {
+                            const marker = L.marker([coords.lat, coords.lon], {
                                 icon: L.divIcon({
                                     html: '<div style="background:' + (c.type === 'primary' ? '#2563eb' : '#f97316') + ';width:12px;height:12px;border-radius:50%;border:2px solid white;box-shadow:0 2px 4px rgba(0,0,0,0.3)"></div>',
                                     iconSize: [12, 12],
                                     iconAnchor: [6, 6]
                                 })
                             });
-                            
+
                             marker.bindPopup(`
                                 <div style="font-family: system-ui; min-width: 250px;">
                                     ${c.type === 'secondary' ? '<div style="background: #fed7aa; color: #9a3412; padding: 4px 8px; border-radius: 4px; margin-bottom: 8px; font-size: 11px; font-weight: 600;">📍 INDIRIZZO SECONDARIO' + (c.descSede ? ' - ' + c.descSede : '') + '</div>' : ''}
@@ -308,22 +352,27 @@
                                     ${c.category ? '<div style="font-size: 11px; color: #6b7280; margin-top: 6px; padding-top: 6px; border-top: 1px solid #e5e7eb;">' + c.category + '</div>' : ''}
                                 </div>
                             `);
-                            
+
                             markerClusterGroup.addLayer(marker);
                         }
-                        
+
                         loaded++;
-                        document.getElementById('progressText').textContent = `${loaded} / ${list.length}`;
-                        document.getElementById('progressFill').style.width = `${(loaded / list.length) * 100}%`;
                     } catch(e) {
                         loaded++;
-                        document.getElementById('progressText').textContent = `${loaded} / ${list.length}`;
-                        document.getElementById('progressFill').style.width = `${(loaded / list.length) * 100}%`;
                     }
                 }));
 
+                // Batch progress updates - only update every 5 items or at the end
+                if (loaded - lastProgressUpdate >= 5 || loaded === list.length) {
+                    updateProgress();
+                    lastProgressUpdate = loaded;
+                }
+
                 await new Promise(r => setTimeout(r, 250));
             }
+
+            // Final progress update to ensure 100%
+            updateProgress();
 
             setTimeout(() => {
                 if (progressDiv.parentNode) progressDiv.remove();
@@ -331,21 +380,35 @@
             }, 2000);
         }
 
-        document.getElementById('provinceFilter').addEventListener('change', function(e) {
-            const province = e.target.value;
+        // Common filter function to avoid duplication - optimized with single pass
+        function applyFilters() {
+            const province = document.getElementById('provinceFilter').value;
             const search = document.getElementById('searchInput').value.toLowerCase();
-            
-            let filtered = customers;
-            if (province) filtered = filtered.filter(c => c.province === province);
-            if (search) filtered = filtered.filter(c => 
-                c.name.toLowerCase().includes(search) || 
-                c.city.toLowerCase().includes(search) ||
-                c.category.toLowerCase().includes(search)
-            );
-            
+
+            // Single pass filtering - more efficient than two separate filter() calls
+            const filtered = customers.filter(c => {
+                // Province filter
+                if (province && c.province !== province) return false;
+
+                // Search filter
+                if (search) {
+                    return c.name.toLowerCase().includes(search) ||
+                           c.city.toLowerCase().includes(search) ||
+                           c.category.toLowerCase().includes(search);
+                }
+
+                return true;
+            });
+
             showCustomers(filtered);
             updateStats(filtered);
-            
+
+            return { filtered, province };
+        }
+
+        document.getElementById('provinceFilter').addEventListener('change', function(e) {
+            const { filtered, province } = applyFilters();
+
             if (province && filtered.length > 0) {
                 document.getElementById('infoBox').innerHTML = `
                     <div class="info-box">
@@ -360,19 +423,11 @@
         });
 
         document.getElementById('searchInput').addEventListener('input', function(e) {
-            const search = e.target.value.toLowerCase();
-            const province = document.getElementById('provinceFilter').value;
-            
-            let filtered = customers;
-            if (province) filtered = filtered.filter(c => c.province === province);
-            if (search) filtered = filtered.filter(c => 
-                c.name.toLowerCase().includes(search) || 
-                c.city.toLowerCase().includes(search) ||
-                c.category.toLowerCase().includes(search)
-            );
-            
-            showCustomers(filtered);
-            updateStats(filtered);
+            // Debounce search to avoid filtering on every keystroke
+            clearTimeout(searchTimeout);
+            searchTimeout = setTimeout(() => {
+                applyFilters();
+            }, 300); // Wait 300ms after user stops typing
         });
     </script>
 </body>
