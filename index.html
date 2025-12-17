@@ -216,16 +216,19 @@
             });
 
             document.getElementById('filters').classList.add('active');
-            
+
             document.getElementById('infoBox').innerHTML = `
                 <div class="info-box">
-                    <div class="info-title">ℹ️ ${customers.length} clienti caricati</div>
-                    Seleziona una provincia per visualizzare i marker sulla mappa. I marker sono raggruppati in cluster: fai zoom per vedere i dettagli!
+                    <div class="info-title">🔄 Caricamento ${customers.length} marker sulla mappa...</div>
+                    I marker sono raggruppati in cluster: fai zoom per vedere i dettagli! Puoi filtrare per provincia o cercare clienti specifici.
                 </div>
             `;
-            
+
             showCustomers(customers);
             updateStats(customers);
+
+            // Automatically visualize all customers on the map
+            geocodeAll(customers);
         }
 
         function updateStats(list) {
@@ -409,7 +412,7 @@
         document.getElementById('provinceFilter').addEventListener('change', function(e) {
             const { filtered, province } = applyFilters();
 
-            if (province && filtered.length > 0) {
+            if (filtered.length > 0) {
                 document.getElementById('infoBox').innerHTML = `
                     <div class="info-box">
                         <div class="info-title">🔄 Caricamento ${filtered.length} marker...</div>
@@ -417,8 +420,15 @@
                     </div>
                 `;
                 geocodeAll(filtered);
-            } else if (province) {
+            } else {
+                // No results - clear the map
                 markerClusterGroup.clearLayers();
+                document.getElementById('infoBox').innerHTML = `
+                    <div class="info-box">
+                        <div class="info-title">⚠️ Nessun risultato</div>
+                        Modifica i filtri per visualizzare i clienti sulla mappa.
+                    </div>
+                `;
             }
         });
 
@@ -426,7 +436,27 @@
             // Debounce search to avoid filtering on every keystroke
             clearTimeout(searchTimeout);
             searchTimeout = setTimeout(() => {
-                applyFilters();
+                const { filtered } = applyFilters();
+
+                // Update map with filtered results
+                if (filtered.length > 0) {
+                    document.getElementById('infoBox').innerHTML = `
+                        <div class="info-box">
+                            <div class="info-title">🔄 Caricamento ${filtered.length} marker...</div>
+                            I marker vengono raggruppati automaticamente. Fai zoom per vedere i dettagli!
+                        </div>
+                    `;
+                    geocodeAll(filtered);
+                } else {
+                    // No results - clear the map
+                    markerClusterGroup.clearLayers();
+                    document.getElementById('infoBox').innerHTML = `
+                        <div class="info-box">
+                            <div class="info-title">⚠️ Nessun risultato</div>
+                            Modifica i filtri per visualizzare i clienti sulla mappa.
+                        </div>
+                    `;
+                }
             }, 300); // Wait 300ms after user stops typing
         });
     </script>
